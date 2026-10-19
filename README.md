@@ -1,240 +1,220 @@
-# Vehicle Specification Extraction Pipeline (RAG + Mistral AI)
+# Vehicle Specification Extraction Pipeline
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.14-blue.svg)](https://www.python.org/)
-[![FAISS](https://img.shields.io/badge/Vector_Store-FAISS_IndexFlatIP-orange.svg)](https://github.com/facebookresearch/faiss)
-[![Mistral AI](https://img.shields.io/badge/LLM-Mistral_AI_/_HuggingFace-ff69b4.svg)](https://mistral.ai/)
-[![Tests](https://img.shields.io/badge/Tests-19%20Passed-brightgreen.svg)](tests/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+A Retrieval-Augmented Generation (RAG) pipeline to extract structured vehicle specifications (torque ratings, fluid capacities, dimensions, part numbers) from an automotive service manual PDF (`sample-service-manual 1.pdf`, Ford F-150 Workshop Manual, 852 pages).
 
-An end-to-end Retrieval-Augmented Generation (RAG) system that parses an 852-page automotive workshop manual (`sample-service-manual 1.pdf` — Ford F-150), builds a dense FAISS vector index, retrieves relevant specification tables, and extracts grounded vehicle specifications (torque ratings, fluid capacities, dimensions, part numbers) in validated JSON and CSV formats using **Mistral AI** (`open-mistral-7b` / Hugging Face `Mistral-7B-Instruct`) with strict Pydantic schema enforcement.
+The extracted specifications are strictly grounded in manual excerpts and exported in JSON or CSV format matching the assignment schema.
 
 ---
 
-## 🎯 Recruiter & Evaluator Quickstart (60 Seconds)
+## Overview
 
-### 1. Run the Interactive Showcase
-A single command runs all 4 benchmark test scenarios through dense vector retrieval and structured specification extraction:
-```bash
-python demo.py
-```
-*(Works out-of-the-box! If an API key is configured in `.env`, it runs live inference against Mistral AI / Hugging Face; otherwise, it executes live local FAISS retrieval and displays the verified benchmark extractions.)*
+Automotive service manuals contain dense technical information presented in multi-column tables and procedure steps. Standard text extraction often separates component names from their corresponding torque numbers or units.
 
-### 2. Run the Automated Test Suite
-```bash
-pytest -v
-```
-*(All 19 tests pass in ~1 minute, covering PDF table extraction, noise filtering, chunk overlap, embedding L2 normalization, FAISS persistence/search, and Pydantic schema validation.)*
+This project implements:
+1. **Layout- and Table-Aware PDF Parsing**: Uses PyMuPDF to extract text while converting multi-column specification tables to Markdown pipe tables, filtering out repetitive headers, footers, and page noise.
+2. **Context-Preserving Chunking**: Splits text on paragraph and table row boundaries, attaching section titles and page numbers to each chunk.
+3. **Dense Vector Retrieval**: Embeds chunks using SentenceTransformers (`all-MiniLM-L6-v2`, 384 dimensions, L2-normalized) and builds an exact inner-product FAISS index (`IndexFlatIP`).
+4. **Structured LLM Extraction**: Queries Mistral AI (`open-mistral-7b` / Hugging Face serverless) using a prompt designed to prevent hallucination, validated against a Pydantic schema (`VehicleSpecification`).
+5. **Output Export**: Exports specifications to validated JSON or CSV formats.
 
 ---
 
-## 📊 Benchmark Extraction Results Gallery
-
-Below are the actual queries executed against the 852-page workshop manual, showing the retrieved context, source pages, and validated structured outputs:
-
-| Natural Language Query | Manual Section | Source Page(s) | Extracted Specifications | Verified Outputs |
-| :--- | :--- | :---: | :--- | :---: |
-| **"What is the torque specification for the brake caliper bolts?"** | `Front Disc Brake`<br>`Rear Disc Brake` | **636, 652** | • Flow bolt: **35 Nm (26 lb-ft)**<br>• Guide pin bolts: **37 Nm (27 lb-ft)**<br>• Anchor plate bolts: **250 Nm (184 lb-ft)**<br>• Support bracket: **150 Nm (111 lb-ft)** | [JSON](examples/example_1_brake_torque.json)<br>[CSV](examples/example_1_brake_torque.csv) |
-| **"What is the torque specification for the wheel nuts?"** | `Wheels and Tires` | **197** | • Wheel nuts: **204 Nm**<br>• Wheel nuts: **150 lb-ft** | [JSON](examples/example_2_wheel_nut_torque.json)<br>[CSV](examples/example_2_wheel_nut_torque.csv) |
-| **"What is the fill capacity for High Performance DOT 3 Brake Fluid?"** | `Brake System - General Information` | **636, 599, 696** | • Motorcraft® DOT 3: **1,420 ml**<br>• Motorcraft® DOT 3: **3.0 pt**<br>• Motorcraft® DOT 3: **740 ml** | [JSON](examples/example_3_brake_fluid_capacity.json)<br>[CSV](examples/example_3_brake_fluid_capacity.csv) |
-| **"What is the recommended tire pressure for an Airbus A380 or Tesla Model 3?"** | *Out of Scope / Ungrounded Query* | — | `[]` **(Empty list)**<br>*(Strict grounding: 0 hallucination guarantee)* | [JSON](examples/example_4_anti_hallucination.json) |
-
----
-
-## 🏗️ Architecture and Data Flow
+## Architecture
 
 ```
-                      +------------------------------------------+
-                      |    sample-service-manual 1.pdf (852p)    |
-                      +------------------------------------------+
-                                           |
-                                           v
-                       +-----------------------------------------+
-                       |             PDFExtractor                |
-                       |  - PyMuPDF layout & table parsing       |
-                       |  - Strips repetitive noise & footers    |
-                       |  - Tracks active manual section titles  |
-                       +-----------------------------------------+
-                                           |
-                                           v
-                       +-----------------------------------------+
-                       |              TextChunker                |
-                       |  - Splits on paragraph & table rows     |
-                       |  - Preserves tabular numeric integrity  |
-                       |  - Enriches chunks with Section & Page  |
-                       +-----------------------------------------+
-                                           |
-                                           v
-                       +-----------------------------------------+
-                       |    LocalSentenceTransformerEmbedder     |
-                       |  - all-MiniLM-L6-v2 (384-dimensional)   |
-                       |  - Unit L2-normalized: ||v|| = 1.0      |
-                       +-----------------------------------------+
-                                           |
-                                           v
-                       +-----------------------------------------+
-                       |             FAISSRetriever              |
-                       |  - IndexFlatIP (cosine similarity)      |
-                       |  - Persisted: data/faiss_index.bin      |
-                       |  - Metadata: data/chunks_metadata.json  |
-                       +-----------------------------------------+
-                                           |
-                                           | Query: e.g. "Brake caliper torque"
-                                           v
-                       +-----------------------------------------+
-                       |        Top-k Semantic Retrieval         |
-                       |  - Ranked context chunks & scores       |
-                       |  - Source page numbers & section headers|
-                       +-----------------------------------------+
-                                           |
-                                           v
-                       +-----------------------------------------+
-                       |        SpecificationExtractor           |
-                       |  - Mistral AI API / Hugging Face        |
-                       |  - Strict Zero-Hallucination Prompt     |
-                       |  - Pydantic Schema Validation           |
-                       +-----------------------------------------+
-                                           |
-                                           v
-                       +-----------------------------------------+
-                       |            Structured Output            |
-                       |  - JSON (Core / Enriched with Evidence) |
-                       |  - Standard CSV with Headers            |
-                       +-----------------------------------------+
+                 sample-service-manual 1.pdf (852 pages)
+                                    |
+                                    v
+                             PDFExtractor
+                 (PyMuPDF table detection & noise removal)
+                                    |
+                                    v
+                               TextChunker
+                 (Splits on paragraphs/rows, preserves tables)
+                                    |
+                                    v
+                      SentenceTransformer Embeddings
+                        (all-MiniLM-L6-v2, 384-dim)
+                                    |
+                                    v
+                             FAISSRetriever
+                 (IndexFlatIP, persistent in data/)
+                                    |
+                User Query --------+
+                                    |
+                                    v
+                            Top-k Chunks (cosine sim)
+                                    |
+                                    v
+                        SpecificationExtractor
+                    (Mistral AI + Pydantic schema)
+                                    |
+                                    v
+                           JSON / CSV Output
 ```
 
 ---
 
-## 📂 Repository File Structure
+## Project Structure
 
 ```
-assignment_new/
-├── Assignment-specs-extraction 1.pdf # Official take-home assignment prompt
-├── sample-service-manual 1.pdf       # Ford F-150 Workshop Manual (852 pages)
-├── demo.py                          # 🚀 Flagship 1-command interactive showcase
-├── requirements.txt                 # Frozen production dependencies
-├── .env.example                     # Environment credentials template (sanitized)
-├── .gitignore                       # Protects secrets, cache, and virtual environments
-├── README.md                        # Project documentation and evaluation guide
+.
+├── Assignment-specs-extraction 1.pdf  # Assignment specification
+├── sample-service-manual 1.pdf        # Ford F-150 Workshop Manual
+├── demo.py                           # Quick demo running sample queries
+├── requirements.txt                  # Python dependencies
+├── .env.example                      # Environment variables template
+├── .gitignore                        # Git ignore file
+├── README.md                         # Project documentation
 │
-├── src/                             # Core production codebase
-│   ├── __init__.py                  # Package exports
-│   ├── pdf_extractor.py             # Layout- and table-preserving PDF extractor
-│   ├── chunker.py                   # Context-preserving semantic text chunker
-│   ├── embeddings.py                # Local Sentence-Transformers embedding provider
-│   ├── retriever.py                 # Persistent FAISS vector store & similarity search
-│   ├── specification_extractor.py   # Mistral AI client & Pydantic schema validator
-│   └── pipeline.py                  # Full end-to-end CLI orchestrator
+├── src/                              # Source code
+│   ├── __init__.py
+│   ├── pdf_extractor.py              # PDF extraction and table parsing
+│   ├── chunker.py                    # Text chunking and metadata preservation
+│   ├── embeddings.py                 # Embedding generation wrapper
+│   ├── retriever.py                  # FAISS index and retrieval logic
+│   ├── specification_extractor.py    # LLM extraction and Pydantic validation
+│   └── pipeline.py                   # Main CLI entry point
 │
-├── data/                            # Persistent vector index & metadata (pre-built)
-│   ├── faiss_index.bin              # FAISS IndexFlatIP binary (1,312 vectors)
-│   └── chunks_metadata.json         # Chunks text, page numbers, and section mapping
+├── data/                             # Pre-built FAISS index and metadata
+│   ├── faiss_index.bin               # FAISS vector index (1,312 vectors)
+│   └── chunks_metadata.json          # Chunks text and page mapping
 │
-├── examples/                        # Recruiter showcase examples & benchmark data
-│   ├── README.md                    # Deep dive into query scenarios & excerpts
-│   ├── example_1_brake_torque.json  # Brake caliper torque JSON output
-│   ├── example_1_brake_torque.csv   # Brake caliper torque CSV output
+├── examples/                         # Sample queries and outputs
+│   ├── README.md
+│   ├── example_1_brake_torque.json
+│   ├── example_1_brake_torque.csv
 │   ├── example_2_wheel_nut_torque.json
 │   ├── example_2_wheel_nut_torque.csv
 │   ├── example_3_brake_fluid_capacity.json
 │   ├── example_3_brake_fluid_capacity.csv
 │   └── example_4_anti_hallucination.json
 │
-├── outputs/                         # Default export destination for pipeline queries
-│   ├── demo_scenario_1_torque.json
-│   ├── demo_scenario_1_torque.csv
-│   ├── demo_scenario_2_wheel_nuts.json
-│   ├── demo_scenario_2_wheel_nuts.csv
-│   ├── demo_scenario_3_fluid_capacity.json
-│   └── demo_scenario_4_anti_hallucination.json
-│
-├── notebooks/                       # Interactive Jupyter Notebook demonstration
+├── outputs/                          # Query output destination
+├── notebooks/                        # Interactive Jupyter notebook walkthrough
 │   └── vehicle_spec_extraction_demo.ipynb
 │
-└── tests/                           # Comprehensive test suite (19 tests)
-    ├── __init__.py
-    ├── test_pdf_extractor.py        # PDF parsing, tables, and noise removal tests
-    ├── test_chunker.py              # Chunk boundary and metadata tests
-    ├── test_embeddings_retriever.py # Embedding normalization and FAISS tests
-    ├── test_specification_extractor.py # Pydantic validation & error handling tests
-    └── test_pipeline.py             # End-to-end integration tests
+└── tests/                            # Unit and integration test suite
+    ├── test_pdf_extractor.py
+    ├── test_chunker.py
+    ├── test_embeddings_retriever.py
+    ├── test_specification_extractor.py
+    └── test_pipeline.py
 ```
 
 ---
 
-## 🛠️ Setup & Installation
+## Quickstart
 
-### 1. Clone Repository & Install Dependencies
+### 1. Run the Demo
+The repository includes the pre-built FAISS index in `data/`, so queries can be run immediately without having to re-index the 852-page manual:
+
 ```bash
-git clone https://github.com/<your-username>/vehicle-spec-extraction.git
-cd vehicle-spec-extraction
+python demo.py
+```
 
+This runs four test cases (brake torque, wheel nut torque, brake fluid capacity, and an out-of-scope query). If an API key is present in `.env`, it queries Mistral AI live; otherwise, it runs local FAISS retrieval and displays the verified benchmark output.
+
+You can also pass a custom query:
+```bash
+python demo.py --query "What is the torque specification for the brake caliper bolts?"
+```
+
+### 2. Run Tests
+```bash
+pytest -v
+```
+
+All 19 tests cover PDF extraction, chunking, embeddings, FAISS indexing, Pydantic schema validation, and end-to-end pipeline execution.
+
+---
+
+## Sample Queries and Results
+
+| Query | Manual Section | Source Page | Extracted Specification | Outputs |
+| :--- | :--- | :---: | :--- | :--- |
+| "What is the torque specification for the brake caliper bolts?" | Front / Rear Disc Brake | 636, 652 | Flow bolt: 35 Nm (26 lb-ft)<br>Guide pin bolts: 37 Nm (27 lb-ft)<br>Anchor plate bolts: 250 Nm (184 lb-ft)<br>Support bracket: 150 Nm (111 lb-ft) | [JSON](examples/example_1_brake_torque.json)<br>[CSV](examples/example_1_brake_torque.csv) |
+| "What is the torque specification for the wheel nuts?" | Wheels and Tires | 197 | Wheel nuts: 204 Nm (150 lb-ft) | [JSON](examples/example_2_wheel_nut_torque.json)<br>[CSV](examples/example_2_wheel_nut_torque.csv) |
+| "What is the fill capacity for High Performance DOT 3 Brake Fluid?" | Brake System - General Info | 636, 599, 696 | Motorcraft DOT 3: 1,420 ml (3.0 pt)<br>Motorcraft DOT 3: 740 ml (1.56 pt) | [JSON](examples/example_3_brake_fluid_capacity.json)<br>[CSV](examples/example_3_brake_fluid_capacity.csv) |
+| "What is the recommended tire pressure for an Airbus A380?" | Out-of-Scope Query | — | `[]` (Empty list, zero hallucination) | [JSON](examples/example_4_anti_hallucination.json) |
+
+---
+
+## Setup and Installation
+
+### 1. Requirements
+- Python 3.10+ (tested on Python 3.10, 3.11, and 3.14)
+- Dependencies listed in `requirements.txt`
+
+### 2. Virtual Environment
+```bash
 python -m venv venv
-# On Windows:
+
+# Windows
 .\venv\Scripts\activate
-# On Linux/macOS:
+
+# Linux/macOS
 source venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-### 2. Configure API Credentials (Optional for Demo, Required for Live LLM)
-Copy `.env.example` to `.env`:
+### 3. Environment Configuration
+Create a `.env` file from the provided template:
+
 ```bash
-# Windows PowerShell:
+# Windows
 Copy-Item .env.example .env
 
-# Linux/macOS:
+# Linux/macOS
 cp .env.example .env
 ```
 
-Open `.env` and configure your preferred LLM provider:
+Set your credentials in `.env`. Supported providers:
 
-#### Option A: Official Mistral AI Platform (Recommended)
-Get a free API key at [console.mistral.ai](https://console.mistral.ai/):
-```ini
-MISTRAL_API_KEY=your_mistral_api_key_here
-HF_MODEL_NAME=open-mistral-7b
-```
+- **Mistral AI Platform** (recommended):
+  ```ini
+  MISTRAL_API_KEY=your_mistral_api_key
+  HF_MODEL_NAME=open-mistral-7b
+  ```
 
-#### Option B: Hugging Face Serverless
-Get a free token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens):
-```ini
-HF_TOKEN=hf_your_token_here
-HF_MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
-```
+- **Hugging Face Serverless**:
+  ```ini
+  HF_TOKEN=hf_your_token
+  HF_MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
+  ```
 
-#### Option C: 100% Offline Local LLM (Ollama)
-```bash
-ollama run mistral
-```
-```ini
-OPENAI_BASE_URL=http://localhost:11434/v1
-HF_MODEL_NAME=mistral
-```
+- **Local Ollama**:
+  ```ini
+  OPENAI_BASE_URL=http://localhost:11434/v1
+  HF_MODEL_NAME=mistral
+  ```
 
 ---
 
-## 🚀 Command-Line Usage
+## CLI Usage
 
-### 1. Run Any Custom Natural-Language Query
+The pipeline can be executed via `src.pipeline`:
+
+### Query Specifications
 ```bash
-# Query torque specifications (JSON to terminal)
+# JSON output to terminal
 python -m src.pipeline query "What is the torque specification for the brake caliper bolts?"
 
-# Query fluid capacity and export directly to CSV
-python -m src.pipeline query "What is the fill capacity for High Performance DOT 3 Brake Fluid?" --format csv --output outputs/brake_fluid.csv
+# Export to CSV
+python -m src.pipeline query "What is the torque specification for the brake caliper bolts?" --format csv --output outputs/brake_caliper.csv
 
-# Query with custom top-k retrieval depth
-python -m src.pipeline query "What is the torque specification for the wheel nuts?" --top-k 5
+# Export to JSON with top-k retrieval depth
+python -m src.pipeline query "What is the fill capacity for High Performance DOT 3 Brake Fluid?" --top-k 5 --format json --output outputs/fluid.json
 ```
 
-### 2. Inspect Vector Index Statistics
+### Inspect the Vector Index
 ```bash
 python -m src.pipeline info
 ```
 Output:
 ```text
-Index Directory:     D:\Downloads\assignment_new\data
+Index Directory:     data
 FAISS Index File:    faiss_index.bin (2.01 MB)
 Metadata File:       chunks_metadata.json (2.28 MB)
 Indexed Chunks:      1,312
@@ -243,74 +223,59 @@ Content Pages:       779
 Major Sections:      19
 ```
 
-### 3. Rebuild Vector Index from PDF (Optional)
-The repository includes the pre-built vector index in `data/` so indexing is **not required** to run queries. To re-index from scratch:
+### Rebuild Index from PDF (Optional)
 ```bash
 python -m src.pipeline index --pdf "sample-service-manual 1.pdf"
 ```
 
 ---
 
-## 🛡️ Grounding & Schema Validation
+## Technical Implementation Details
 
-### Output Schema (`VehicleSpecification`)
-Every extracted specification strictly adheres to the following Pydantic schema:
+### PDF Extraction & Table Preservation (`src/pdf_extractor.py`)
+- Workshop manual specifications are organized in structured tables (e.g. `Description | Nm | lb-ft | lb-in`).
+- Using PyMuPDF's `find_tables()`, detected tables are converted to Markdown pipe tables so column relationships remain intact.
+- Non-tabular text blocks that do not overlap with tables are extracted separately and merged in reading order.
+- Noise lines (such as `Page X sur Y`, print dates, and internal file paths like `file:///C:/TSO/...`) are removed via regex.
+- Active section headers (e.g., `SECTION 206-03: Front Disc Brake`) are tracked across pages and assigned to chunks.
 
-```json
-{
-  "component": "Brake caliper flow bolt",
-  "spec_type": "Torque",
-  "value": "35",
-  "unit": "Nm",
-  "page_number": 636,
-  "source_excerpt": "Brake caliper flow bolt | 35 | 26 | — |"
-}
-```
+### Chunking Strategy (`src/chunker.py`)
+- Chunks split on natural paragraph breaks (`\n\n`) and table rows (`\n`) rather than fixed character boundaries to avoid cutting numbers from component names.
+- Default settings: `chunk_size=900` characters with `chunk_overlap=150` characters.
+- Each chunk is prepended with contextual metadata `[Section: ... | Page: ...]` before embedding to improve retrieval accuracy on specific technical systems.
 
-### Anti-Hallucination Measures
-1. **Isolated Context Ingestion:** The LLM is provided only the top-$k$ retrieved chunks accompanied by section headers and page numbers.
-2. **Strict System Prompt:** Explicitly forbids guessing, fabricating, or synthesizing specifications absent from the retrieved excerpts.
-3. **Empty Array Contract:** If the retrieved text lacks the requested specification, the system returns `[]` rather than hallucinating plausible values.
-4. **Pydantic Validation:** Strips code fences and validates that all required fields (`component`, `spec_type`, `value`, `unit`) are non-null and typed.
+### Embedding & Vector Search (`src/embeddings.py`, `src/retriever.py`)
+- Uses `all-MiniLM-L6-v2` locally via SentenceTransformers.
+- Embeddings are 384-dimensional and explicitly L2-normalized ($\|v\|_2 = 1.0$).
+- Vector store uses FAISS `IndexFlatIP`, where the inner product on normalized vectors is equivalent to cosine similarity.
+- The index and chunk metadata are saved to `data/faiss_index.bin` and `data/chunks_metadata.json`.
+
+### Structured Output & Grounding (`src/specification_extractor.py`)
+- Every extracted specification is validated against the `VehicleSpecification` Pydantic model:
+  ```python
+  class VehicleSpecification(BaseModel):
+      component: str
+      spec_type: str
+      value: str
+      unit: str
+      page_number: Optional[int] = None
+      source_excerpt: Optional[str] = None
+  ```
+- **Grounding and Anti-Hallucination**: The prompt instructs the model to extract values *only* from the provided context. If the requested information is absent or out-of-scope, the model returns an empty list `[]` instead of hallucinating values.
+- Clean JSON and CSV serializers format the data according to the assignment requirements.
 
 ---
 
-## 🧪 Automated Testing
+## Testing
 
-Run the full pytest suite:
+Run the test suite using pytest:
 ```bash
 pytest -v
 ```
 
-Test Suite Coverage:
-- `tests/test_pdf_extractor.py`: Multi-column table markdown conversion, footer regex noise removal, section title detection, and range extraction.
-- `tests/test_chunker.py`: Paragraph and table row boundary splitting, minimum chunk size, and context header enrichment.
-- `tests/test_embeddings_retriever.py`: Sentence-Transformers 384-dim embedding generation, L2 normalization ($\|v\|_2 = 1.0$), FAISS `IndexFlatIP` persistence, reloading, and similarity ranking.
-- `tests/test_specification_extractor.py`: Pydantic model validation, markdown code-fence stripping, empty result parsing, JSON decode error handling, and JSON/CSV export formatting.
-- `tests/test_pipeline.py`: End-to-end integration test from raw text chunks to vector search and structured extraction.
-
----
-
-## 📤 GitHub Submission Guide for Candidates
-
-If you are pushing this repository to your personal GitHub account to share with recruiters:
-
-```bash
-# 1. Initialize git repository
-git init
-
-# 2. Stage all project files (.gitignore automatically excludes .env and cache)
-git add .
-
-# 3. Commit
-git commit -m "feat: complete vehicle specification extraction pipeline with Mistral AI"
-
-# 4. Link to your GitHub remote
-git remote add origin https://github.com/<your-username>/<your-repo-name>.git
-
-# 5. Push to main branch
-git branch -M main
-git push -u origin main
-```
-
-> **Security Verification:** Notice that `.gitignore` prevents `.env` from ever being staged or committed. The repository provides `.env.example` as a clean, sanitized template for evaluators.
+The 19 tests verify:
+- Table extraction and noise line removal in `test_pdf_extractor.py`.
+- Chunk boundaries and overlap behavior in `test_chunker.py`.
+- Vector normalization, FAISS indexing, and retrieval ranking in `test_embeddings_retriever.py`.
+- Pydantic validation, markdown code block stripping, and export functions in `test_specification_extractor.py`.
+- Pipeline indexing and query flow in `test_pipeline.py`.

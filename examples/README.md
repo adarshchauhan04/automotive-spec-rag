@@ -1,10 +1,10 @@
-# Example Specification Queries & Grounded Outputs
+# Sample Queries and Outputs
 
-This folder documents benchmark extraction scenarios from the 852-page Ford F-150 Workshop Manual (`sample-service-manual 1.pdf`). Each example demonstrates the exact natural-language query, the retrieved manual context with exact page citations, the grounded LLM extraction, and the validated JSON/CSV outputs.
+This directory contains sample extraction outputs from `sample-service-manual 1.pdf` (Ford F-150 Workshop Manual) showing the queries, retrieved manual excerpts, and generated JSON/CSV outputs.
 
 ---
 
-## Benchmark Scenarios
+## Sample Queries
 
 ### Example 1: Fastener Torque Specification (Front & Rear Disc Brakes)
 - **Natural Language Query:**  

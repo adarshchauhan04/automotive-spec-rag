@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-Interactive Recruiter Showcase & Demonstration Script
-Vehicle Specification Extraction Pipeline
+Demo script to run sample specification queries against the workshop manual.
 
-Run:
+Usage:
     python demo.py
     python demo.py --query "What is the torque specification for the brake caliper bolts?"
 """
@@ -158,13 +157,13 @@ def run_single_query(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Recruiter Showcase: Vehicle Specification Extraction RAG Pipeline"
+        description="Demo script for vehicle specification extraction pipeline"
     )
     parser.add_argument(
         "--query",
         type=str,
         default=None,
-        help="Custom query to run against the indexed manual.",
+        help="Query string to search in the service manual.",
     )
     parser.add_argument(
         "--top-k",
@@ -174,15 +173,15 @@ def main():
     )
     args = parser.parse_args()
 
-    print_banner("VEHICLE SPECIFICATION EXTRACTION DEMO (FORD F-150 SERVICE MANUAL)")
-    print("Document: 852-page Ford F-150 Workshop Manual ('sample-service-manual 1.pdf')")
-    print("Pipeline: PyMuPDF -> Semantic Chunker -> FAISS IndexFlatIP -> Mistral AI")
+    print_banner("Vehicle Specification Extraction - Demo")
+    print("Service manual: sample-service-manual 1.pdf (852 pages)")
+    print("Pipeline: PyMuPDF -> TextChunker -> FAISS (all-MiniLM-L6-v2) -> Mistral AI")
 
     # 1. Initialize Retriever
     index_dir = Path("data")
     if not (index_dir / "faiss_index.bin").exists():
         print(f"\n[ERROR]: Index not found in {index_dir.resolve()}.")
-        print("Please build the index first with: python -m src.pipeline index")
+        print("Build the index first using: python -m src.pipeline index")
         sys.exit(1)
 
     embedder = get_embedder("local", model_name="all-MiniLM-L6-v2")
@@ -204,28 +203,28 @@ def main():
             json.dump([s.model_dump() for s in specs], f, indent=2)
         print(f"\n[SAVED]: Results exported to {out_json}")
     else:
-        # Run 4 flagship recruiter showcase scenarios
+        # Run standard test scenarios
         scenarios = [
             (
-                "Scenario 1: Fastener Torque Specification (Brake Caliper)",
+                "Test 1: Brake Caliper Torque",
                 "What is the torque specification for the brake caliper bolts?",
                 "brake_caliper",
                 "demo_scenario_1_torque.json",
             ),
             (
-                "Scenario 2: Fastener Torque Specification (Wheel Stud Nuts)",
+                "Test 2: Wheel Nut Torque",
                 "What is the torque specification for the wheel nuts?",
                 "wheel_nuts",
                 "demo_scenario_2_wheel_nuts.json",
             ),
             (
-                "Scenario 3: Fluid Capacity Specification (DOT 3 Brake Fluid)",
+                "Test 3: Brake Fluid Capacity",
                 "What is the fill capacity for High Performance DOT 3 Brake Fluid?",
                 "brake_fluid",
                 "demo_scenario_3_fluid_capacity.json",
             ),
             (
-                "Scenario 4: Anti-Hallucination & Out-of-Scope Rejection",
+                "Test 4: Out-of-Scope Query (Anti-Hallucination)",
                 "What is the recommended tire inflation pressure for an Airbus A380 or a Tesla Model 3?",
                 "airplane",
                 "demo_scenario_4_anti_hallucination.json",
@@ -247,10 +246,8 @@ def main():
                 with open(csv_path, "w", encoding="utf-8", newline="") as f:
                     f.write(extractor.to_csv(specs))
 
-        print_banner("DEMONSTRATION COMPLETE")
-        print("All benchmark scenario outputs have been verified and saved to outputs/")
-        print("Automated test suite status: 19/19 tests passing (`pytest -v`)")
-        print("=" * 70 + "\n")
+        print_banner("Demo Finished")
+        print("Outputs saved in outputs/")
 
 
 if __name__ == "__main__":
