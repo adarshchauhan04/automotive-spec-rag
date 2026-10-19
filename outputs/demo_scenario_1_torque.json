@@ -1,0 +1,34 @@
+[
+  {
+    "component": "Brake caliper flow bolt",
+    "spec_type": "Torque",
+    "value": "35",
+    "unit": "Nm",
+    "page_number": 652,
+    "source_excerpt": "Brake caliper flow bolt | 35 | 26 | \u2014"
+  },
+  {
+    "component": "Brake caliper flow bolt",
+    "spec_type": "Torque",
+    "value": "26",
+    "unit": "lb-ft",
+    "page_number": 652,
+    "source_excerpt": "Brake caliper flow bolt | 35 | 26 | \u2014"
+  },
+  {
+    "component": "Brake caliper flow bolt",
+    "spec_type": "Torque",
+    "value": "35",
+    "unit": "Nm",
+    "page_number": 636,
+    "source_excerpt": "Brake caliper flow bolt | 35 | 26 | \u2014"
+  },
+  {
+    "component": "Brake caliper flow bolt",
+    "spec_type": "Torque",
+    "value": "26",
+    "unit": "lb-ft",
+    "page_number": 636,
+    "source_excerpt": "Brake caliper flow bolt | 35 | 26 | \u2014"
+  }
+]

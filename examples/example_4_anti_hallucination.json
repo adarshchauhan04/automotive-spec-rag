@@ -1,0 +1,6 @@
+{
+  "query": "What is the recommended tire inflation pressure for an Airbus A380 or a Tesla Model 3?",
+  "top_retrieved_scores": [0.412, 0.389],
+  "extracted_specifications": [],
+  "explanation": "Strict Grounding Guarantee: The workshop manual covers the 2014 Ford F-150. Out-of-scope entities (aircraft, electric sedans) or unmentioned components produce low semantic relevance and are strictly evaluated as empty ([]) by the LLM prompt instructions without fabricating or hallucinating numbers."
+}

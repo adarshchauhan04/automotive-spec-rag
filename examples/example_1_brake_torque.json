@@ -1,0 +1,34 @@
+[
+  {
+    "component": "Brake caliper flow bolt",
+    "spec_type": "Torque",
+    "value": "35",
+    "unit": "Nm",
+    "page_number": 636,
+    "source_excerpt": "Brake caliper flow bolt | 35 | 26 | — |"
+  },
+  {
+    "component": "Brake caliper guide pin bolts",
+    "spec_type": "Torque",
+    "value": "37",
+    "unit": "Nm",
+    "page_number": 636,
+    "source_excerpt": "Brake caliper guide pin bolts | 37 | 27 | — |"
+  },
+  {
+    "component": "Brake caliper anchor plate bolts",
+    "spec_type": "Torque",
+    "value": "250",
+    "unit": "Nm",
+    "page_number": 636,
+    "source_excerpt": "Brake caliper anchor plate bolts | 250 | 184 | — |"
+  },
+  {
+    "component": "Rear brake caliper support bracket bolts",
+    "spec_type": "Torque",
+    "value": "150",
+    "unit": "Nm",
+    "page_number": 652,
+    "source_excerpt": "Brake caliper support bracket bolts | 150 | 111 | — |"
+  }
+]

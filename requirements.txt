@@ -1,0 +1,18 @@
+# Vehicle Specification Extraction Dependencies
+# Core PDF extraction & layout analysis
+pymupdf>=1.24.0
+
+# Embeddings & Vector Indexing
+sentence-transformers>=3.0.0
+faiss-cpu>=1.8.0
+numpy>=1.24.0
+torch>=2.0.0
+transformers>=4.40.0
+
+# Hugging Face Mistral AI LLM Extraction
+huggingface-hub>=0.20.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=7.4.0

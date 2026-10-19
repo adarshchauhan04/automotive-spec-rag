@@ -1,0 +1,18 @@
+[
+  {
+    "component": "Wheel nuts",
+    "spec_type": "Torque",
+    "value": "204",
+    "unit": "Nm",
+    "page_number": 197,
+    "source_excerpt": "Tighten to 204 Nm (150 lb-ft)."
+  },
+  {
+    "component": "Wheel nuts",
+    "spec_type": "Torque",
+    "value": "150",
+    "unit": "lb-ft",
+    "page_number": 197,
+    "source_excerpt": "Tighten to 204 Nm (150 lb-ft)."
+  }
+]
